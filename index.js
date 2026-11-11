@@ -1,13 +1,9 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { createServer } = require('https');
-const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
-
-// WebSocket for real-time updates
 const wss = new WebSocket.Server({ server });
 
 // Store connected clients and their states
@@ -17,81 +13,70 @@ const clients = new Map(); // uuid -> { username, modEnabled }
 let totalConnections = 0;
 let modOnCount = 0;
 
-// In-memory database of all tracked hitsboxes (for demo)
-const hitboxData = [];
-
 // Initialize
 console.log('HitboxRender Server starting on port 3000...');
 app.use(express.json());
 
-// Middleware to track client connections
-server.on('connection', (socket) => {
-    console.log('New HTTP connection detected');
-});
-
 // WebSocket handler for real-time updates
 wss.on('connection', (ws) => {
-    console.log('WebSocket connected');
+    console.log('[SERVER] WebSocket connected');
     
     // Handle incoming messages from clients
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
-        
-        if (data.type === 'register') {
-            const { uuid, username, modEnabled } = data;
+        try {
+            const data = JSON.parse(message);
             
-            // Store client info
-            clients.set(uuid.toLowerCase(), {
-                uuid,
-                username,
-                modEnabled,
-                lastSeen: new Date().toISOString()
-            });
-            
-            // Update stats
-            totalConnections++;
-            if (modEnabled) modOnCount++;
-            
-            console.log(`Client registered: ${username} (${uuid.slice(0, 8)}...) - Mod: ${modEnabled ? 'ON' : 'OFF'}`);
-            
-            // Broadcast update to all connected clients
-            broadcastUpdate();
-            
-        } else if (data.type === 'toggle') {
-            const { uuid } = data;
-            
-            // Toggle the client's state
-            const clientData = clients.get(uuid.toLowerCase());
-            if (clientData) {
-                clientData.modEnabled = !clientData.modEnabled;
-                totalConnections--;
-                modOnCount++;
-                console.log(`Client ${username} toggled to: ${clientData.modEnabled ? 'ON' : 'OFF'}`);
+            if (data.type === 'register') {
+                const { uuid, username, modEnabled } = data;
                 
-                broadcastUpdate();
+                // Store client info
+                clients.set(uuid.toLowerCase(), {
+                    uuid,
+                    username,
+                    modEnabled,
+                    lastSeen: new Date().toISOString()
+                });
+                
+                // Update stats
+                totalConnections++;
+                if (modEnabled) modOnCount++;
+                
+                console.log(`[SERVER] Client registered: ${username} (${uuid.slice(0, 8)}...) - Mod: ${modEnabled ? 'ON' : 'OFF'}`);
+                
+            } else if (data.type === 'toggle') {
+                const { uuid } = data;
+                
+                // Toggle the client's state
+                const clientData = clients.get(uuid.toLowerCase());
+                if (clientData) {
+                    clientData.modEnabled = !clientData.modEnabled;
+                    if (clientData.modEnabled) modOnCount++;
+                    else modOnCount--;
+                    
+                    console.log(`[SERVER] ${username} toggled to: ${clientData.modEnabled ? 'ON' : 'OFF'}`);
+                }
+                
+            } else if (data.type === 'heartbeat') {
+                // Update last seen time
+                const clientData = clients.get(uuid.toLowerCase());
+                if (clientData) {
+                    clientData.lastSeen = new Date().toISOString();
+                }
             }
-        } else if (data.type === 'heartbeat') {
-            // Update last seen time
-            const clientData = clients.get(uuid.toLowerCase());
-            if (clientData) {
-                clientData.lastSeen = new Date().toISOString();
-            }
+        } catch (e) {
+            console.error('[SERVER] WebSocket error:', e.message);
         }
     });
     
     ws.on('close', () => {
         // Clean up on disconnect
-        wss.clients.forEach(client => {
-            if (client === ws) {
-                clients.forEach((data, uuid) => {
-                    if (uuid === ws._socket?.remoteAddress + ':' + ws._socket.remotePort) {
-                        console.log('Client disconnected: ' + data.username);
-                        clients.delete(uuid.toLowerCase());
-                        totalConnections--;
-                        modOnCount++;
-                        broadcastUpdate();
-                    }
-                });
+        clients.forEach((data, uuid) => {
+            if (uuid === ws._socket?.remoteAddress + ':' + ws._socket.remotePort) {
+                console.log(`[SERVER] Client disconnected: ${data.username}`);
+                clients.delete(uuid.toLowerCase());
+                totalConnections--;
+                modOnCount++;
+                broadcastUpdate();
             }
         });
     });
@@ -107,8 +92,7 @@ function broadcastUpdate() {
             modOnCount,
             modOffCount: totalConnections - modOnCount
         },
-        clients: Array.from(clients.values()),
-        hitboxData
+        clients: Array.from(clients.values())
     };
     
     wss.clients.forEach(client => {
@@ -148,7 +132,7 @@ app.post('/api/hitboxrender/toggle', (req, res) => {
     clientData.modEnabled = !clientData.modEnabled;
     modOnCount = Array.from(clients.values()).filter(c => c.modEnabled).length;
     
-    console.log(`Toggled ${clientData.username} to: ${clientData.modEnabled ? 'ON' : 'OFF'}`);
+    console.log(`[SERVER] Toggled ${clientData.username} to: ${clientData.modEnabled ? 'ON' : 'OFF'}`);
     
     // Broadcast update
     broadcastUpdate();
@@ -164,26 +148,16 @@ app.post('/api/hitboxrender/register-hitsbox', (req, res) => {
     const { uuid, username, timestamp } = req.body;
     
     // Store hitbox data
-    hitboxData.push({
+    const hitboxEntry = {
         uuid,
         username,
         timestamp: new Date().toISOString(),
         type: 'hitbox_rendered'
-    });
+    };
     
-    // Keep only last 100 entries
-    if (hitboxData.length > 100) {
-        hitboxData.shift();
-    }
+    console.log(`[SERVER] Hitsbox registered for ${username}`);
     
-    console.log(`Hitsbox registered for ${username}`);
-    
-    res.json({ success: true });
-});
-
-// API endpoint to get hitsbox data
-app.get('/api/hitboxrender/data', (req, res) => {
-    res.json({ hitboxData });
+    res.json({ success: true, data: hitboxEntry });
 });
 
 // Start server
@@ -198,11 +172,11 @@ server.listen(PORT, () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('SIGTERM received. Shutting down...');
+    console.log('[SERVER] SIGTERM received. Shutting down...');
     process.exit(0);
 });
 
 process.on('SIGINT', () => {
-    console.log('SIGINT received. Shutting down...');
+    console.log('[SERVER] SIGINT received. Shutting down...');
     process.exit(0);
 });
