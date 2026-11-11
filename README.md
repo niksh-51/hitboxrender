@@ -1,66 +1,66 @@
-# HitboxRender Server for Render.com
+# HitboxRender Backend Server
 
-This is the backend server for the HitboxRender mod that tracks connected clients and their mod state.
+Express.js + WebSocket backend server for Render.com deployment.
 
-## Deployment to Render.com
+## Quick Deploy to Render.com
 
-### Option 1: Deploy as Static + Runtime Service
+### Option 1: Push to GitHub (Recommended)
 
-1. **Frontend (Static)**
-   - Build the React frontend: `npm run build`
-   - Deploy to Render Static Site
-   
-2. **Backend (Runtime)**
-   - Use a separate Render Web Service for Express.js backend
-   - Or deploy both together using Render's multi-service support
+```bash
+cd server
+git init
+git add .
+git commit -m "Initial commit"
+# Add your remote and push
+git remote add origin YOUR_GITHUB_REPO_URL
+git push -u origin main
+```
 
-### Option 2: Single Container Deployment
+Then in Render.com:
+1. Create new Web Service
+2. Connect your GitHub repo
+3. Set environment variables:
+   ```
+   NODE_ENV=production
+   PORT=3000
+   ```
+4. Deploy automatically!
 
-Use Docker or create a deployment script that bundles everything.
+### Option 2: Direct Upload
+
+Go to [Render.com](https://render.com) → New + → Web Service → Import existing source, then upload the entire `server/` folder.
 
 ## API Endpoints
 
-- `GET /api/hitboxrender/state` - Get current state and connected clients
-- `POST /api/hitboxrender/toggle` - Toggle a client's mod state
-- `POST /api/hitboxrender/register-hitsbox` - Register a hitsbox event from client
-- `GET /api/hitboxrender/data` - Get hitsbox data
+- `GET /api/hitboxrender/state` - Get current state
+- `POST /api/hitboxrender/toggle` - Toggle client state
+- `POST /api/hitboxrender/register-hitsbox` - Register hitsbox event
 
-## Environment Variables
+## Environment Variables (Render.com)
 
-Set these in your Render dashboard:
+| Variable | Value | Required |
+|----------|-------|----------|
+| `NODE_ENV` | `production` | Yes |
+| `PORT` | `3000` | Yes |
 
-```
-PORT=3000
-NODE_ENV=production
-```
-
-## Building for Production
+## Development
 
 ```bash
 npm install
-npm run build
-# or just start directly from source files
 npm start
+# or for dev with hot reload:
+npm run dev
 ```
 
-## Render.com Setup
+## Build Commands
 
-1. **Create a new Web Service** in your Render account
-2. **Set environment variables:**
-   - `NODE_ENV=production`
-   - `PORT=3000`
-3. **Deploy:** Push to your Git repo and Render will auto-deploy
-4. **Get the URL:** This is your `SERVER_CONFIG_URL` for clients
+```bash
+# Install dependencies
+npm install
 
-## Client Integration
+# Start server
+npm start
 
-Update `HitboxRenderClient.SERVER_CONFIG_URL` in your mod with your server URL:
-
-```java
-public static String SERVER_CONFIG_URL = "https://your-render-url.com/api/hitboxrender/state";
+# For local testing with nodemon (uncomment in package.json)
+# npm run dev
 ```
-
-The client will:
-1. Fetch state on startup
-2. Poll for updates every 2 seconds
-3. Report hitsbox events to the server via WebSocket

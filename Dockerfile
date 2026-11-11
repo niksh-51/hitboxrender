@@ -2,14 +2,14 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY server/package*.json ./
+# Copy package files first (for layer caching)
+COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
 # Copy source code
-COPY server/index.js ./
+COPY index.js ./
 
 # Create data directory for persistence
 RUN mkdir -p /app/data && chmod 777 /app/data

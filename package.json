@@ -11,6 +11,9 @@
     "express": "^4.18.2",
     "ws": "^8.14.2"
   },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
   "keywords": ["hitbox", "minecraft", "render"],
   "author": "",
   "license": "MIT"
